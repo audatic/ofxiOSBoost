@@ -24,19 +24,19 @@ here="`dirname \"$0\"`"
 echo "cd-ing to $here"
 cd "$here" || exit 1
 
-CPPSTD=c++11    #c++89, c++99, c++14
+CPPSTD=c++17
 STDLIB=libc++   # libstdc++
 COMPILER=clang++
 PARALLEL_MAKE=`sysctl -n hw.ncpu` # how many threads to make boost with
 
-BOOST_V1=1.60.0
-BOOST_V2=1_60_0
+BOOST_V1=1.70.0
+BOOST_V2=1_70_0
 
 #BITCODE="-fembed-bitcode"  # Uncomment this line for Bitcode generation
 
 CURRENTPATH=`pwd`
 LOGDIR="$CURRENTPATH/build/logs/"
-IOS_MIN_VERSION=7.0
+IOS_MIN_VERSION=12.0
 SDKVERSION=`xcrun -sdk iphoneos --show-sdk-version`
 OSX_SDKVERSION=`xcrun -sdk macosx --show-sdk-version`
 DEVELOPER=`xcode-select -print-path`
@@ -65,9 +65,9 @@ case $CURRENTPATH in
           ;;
 esac
 
-: ${BOOST_LIBS:="random regex graph random chrono thread signals filesystem system date_time locale"}
+: ${BOOST_LIBS:="thread"}
 : ${IPHONE_SDKVERSION:=`xcodebuild -showsdks | grep iphoneos | egrep "[[:digit:]]+\.[[:digit:]]+" -o | tail -1`}
-: ${EXTRA_CPPFLAGS:="-fPIC -DBOOST_SP_USE_SPINLOCK -std=$CPPSTD -stdlib=$STDLIB -miphoneos-version-min=$IOS_MIN_VERSION $BITCODE -fvisibility=hidden -fvisibility-inlines-hidden"}
+: ${EXTRA_CPPFLAGS:="-fPIC -D_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR -DBOOST_SP_USE_SPINLOCK -std=$CPPSTD -stdlib=$STDLIB -miphoneos-version-min=$IOS_MIN_VERSION $BITCODE -fvisibility=hidden -fvisibility-inlines-hidden"}
 
 : ${TARBALLDIR:=`pwd`/..}
 : ${SRCDIR:=`pwd`/../build/src}
@@ -141,6 +141,7 @@ postcleanEverything()
     rm -rf $IOSBUILDDIR/armv7/obj
     #rm -rf $IOSBUILDDIR/armv7s/obj
 	rm -rf $IOSBUILDDIR/arm64/obj
+	rm -rf $IOSBUILDDIR/arm64e/obj
     rm -rf $IOSBUILDDIR/i386/obj
 	rm -rf $IOSBUILDDIR/x86_64/obj
     rm -rf $TARBALLDIR/build
@@ -220,16 +221,16 @@ updateBoost()
     local CROSS_SDK_SIM="iPhoneSimulator${SDKVERSION}.sdk"
     local BUILD_TOOLS="${DEVELOPER}"
 
-    /usr/bin/sed -ie 's/-arch arm/-arch armv7 -arch arm64/g' "${BOOST_SRC}/tools/build/src/tools/darwin.jam"
+    /usr/bin/sed -ie 's/-arch arm/-arch arm64 -arch arm64e/g' "${BOOST_SRC}/tools/build/src/tools/darwin.jam"
     cp $BOOST_SRC/tools/build/example/user-config.jam $BOOST_SRC/tools/build/example/user-config.jam.bk
 
     cat >> $BOOST_SRC/tools/build/example/user-config.jam <<EOF
 using darwin : ${IPHONE_SDKVERSION}~iphone
-: $XCODE_ROOT/Toolchains/XcodeDefault.xctoolchain/usr/bin/$COMPILER -arch armv7 -arch arm64 $EXTRA_CPPFLAGS -isysroot ${CROSS_TOP_IOS}/SDKs/${CROSS_SDK_IOS} -I${CROSS_TOP_IOS}/SDKs/${CROSS_SDK_IOS}/usr/include/ -L${CROSS_TOP_IOS}/SDKs/${CROSS_SDK_IOS}/usr/lib/
+: $XCODE_ROOT/Toolchains/XcodeDefault.xctoolchain/usr/bin/$COMPILER -arch arm64 -arch arm64e $EXTRA_CPPFLAGS -isysroot ${CROSS_TOP_IOS}/SDKs/${CROSS_SDK_IOS} -I${CROSS_TOP_IOS}/SDKs/${CROSS_SDK_IOS}/usr/include/ -L${CROSS_TOP_IOS}/SDKs/${CROSS_SDK_IOS}/usr/lib/
 : <striper> <root>$XCODE_ROOT/Platforms/iPhoneOS.platform/Developer <architecture>arm <target-os>iphone
 ;
 using darwin : ${IPHONE_SDKVERSION}~iphonesim
-: $XCODE_ROOT/Toolchains/XcodeDefault.xctoolchain/usr/bin/$COMPILER -arch i386 -arch x86_64 $EXTRA_CPPFLAGS -isysroot ${CROSS_TOP_SIM}/SDKs/${CROSS_SDK_SIM} -I${CROSS_TOP_SIM}/SDKs/${CROSS_SDK_SIM}/usr/include/
+: $XCODE_ROOT/Toolchains/XcodeDefault.xctoolchain/usr/bin/$COMPILER -arch x86_64 $EXTRA_CPPFLAGS -isysroot ${CROSS_TOP_SIM}/SDKs/${CROSS_SDK_SIM} -I${CROSS_TOP_SIM}/SDKs/${CROSS_SDK_SIM}/usr/include/
 : <striper> <root>$XCODE_ROOT/Platforms/iPhoneSimulator.platform/Developer <architecture>x86 <target-os>iphone
 ;
 EOF
@@ -330,6 +331,7 @@ scrunchAllLibsTogetherInOneLibPerPlatform()
     mkdir -p $IOSBUILDDIR/armv7/obj
     #mkdir -p $IOSBUILDDIR/armv7s/obj
 	mkdir -p $IOSBUILDDIR/arm64/obj
+	mkdir -p $IOSBUILDDIR/arm64e/obj
     mkdir -p $IOSBUILDDIR/i386/obj
 	mkdir -p $IOSBUILDDIR/x86_64/obj
 
@@ -342,6 +344,7 @@ scrunchAllLibsTogetherInOneLibPerPlatform()
         $ARM_DEV_CMD lipo "iphone-build/stage/lib/$NAME" -thin armv7 -o $IOSBUILDDIR/armv7/$NAME
         #$ARM_DEV_CMD lipo "iphone-build/stage/lib/$NAME" -thin armv7s -o $IOSBUILDDIR/armv7s/$NAME
 		$ARM_DEV_CMD lipo "iphone-build/stage/lib/$NAME" -thin arm64 -o $IOSBUILDDIR/arm64/$NAME
+		$ARM_DEV_CMD lipo "iphone-build/stage/lib/$NAME" -thin arm64e -o $IOSBUILDDIR/arm64e/$NAME
 
 		$ARM_DEV_CMD lipo "iphonesim-build/stage/lib/$NAME" -thin i386 -o $IOSBUILDDIR/i386/$NAME
 		$ARM_DEV_CMD lipo "iphonesim-build/stage/lib/$NAME" -thin x86_64 -o $IOSBUILDDIR/x86_64/$NAME
@@ -355,6 +358,7 @@ scrunchAllLibsTogetherInOneLibPerPlatform()
         (cd $IOSBUILDDIR/armv7/obj; ar -x ../$NAME );
         #(cd $IOSBUILDDIR/armv7s/obj; ar -x ../$NAME );
 		(cd $IOSBUILDDIR/arm64/obj; ar -x ../$NAME );
+		(cd $IOSBUILDDIR/arm64e/obj; ar -x ../$NAME );
         (cd $IOSBUILDDIR/i386/obj; ar -x ../$NAME );
 		(cd $IOSBUILDDIR/x86_64/obj; ar -x ../$NAME );
     done
@@ -369,6 +373,8 @@ scrunchAllLibsTogetherInOneLibPerPlatform()
     #(cd $IOSBUILDDIR/armv7s; $ARM_DEV_CMD ar crus libboost.a obj/*.o; )
     echo ...arm64
     (cd $IOSBUILDDIR/arm64; $ARM_DEV_CMD ar crus libboost.a obj/*.o; )
+    echo ...arm64e
+    (cd $IOSBUILDDIR/arm64e; $ARM_DEV_CMD ar crus libboost.a obj/*.o; )
     echo ...i386
     (cd $IOSBUILDDIR/i386;  $SIM_DEV_CMD ar crus libboost.a obj/*.o; )
     echo ...x86_64
@@ -377,6 +383,7 @@ scrunchAllLibsTogetherInOneLibPerPlatform()
     echo "Making fat lib for iOS Boost $BOOST_VERSION"
     lipo -c $IOSBUILDDIR/armv7/libboost.a \
             $IOSBUILDDIR/arm64/libboost.a \
+            $IOSBUILDDIR/arm64e/libboost.a \
             $IOSBUILDDIR/i386/libboost.a \
             $IOSBUILDDIR/x86_64/libboost.a \
             -output $OUTPUT_DIR_LIB/libboost.a
